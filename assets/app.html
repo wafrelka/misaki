@@ -1,0 +1,32 @@
+<html>
+	<head>
+		<title>Misaki Control Panel</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<link href="/app.css" rel="stylesheet">
+		<script src="/app.js" type="module"></script>
+	</head>
+	<body>
+		<div id="container">
+			<header>
+				Misaki Control Panel
+			</header>
+			<div id="list">
+				<template>
+					<button class="item">
+						<div class="name"></div>
+						<div class="memo"></div>
+						<div class="programs">
+							<template><div class="program-line"></div></template>
+						</div>
+						<div class="status">
+							<i class="display-done">done</i>
+							<i class="display-inflight">send</i>
+							<i class="display-error">error_outline</i>
+						</div>
+					</button>
+				</template>
+			</div>
+		</div>
+	</body>
+</html>

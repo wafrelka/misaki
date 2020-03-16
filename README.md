@@ -1,9 +1,11 @@
-# misaki
+# Misaki
+
+Tools for executing preset commands via the web interface.
+
+![screenshot.png](./docs/screenshot.png)
+
+## Architecture
 
 ```
-Slack
----> Amazon SQS (Slack Integration / Amazon SQS)
----> misaki
----> Slack (Incoming Webhooks)
+misaki server ---> Amazon SQS ---> misaki executor ---> Slack (Incoming Webhooks)
 ```
-

@@ -2,241 +2,163 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"net/url"
-	"os/exec"
-	"strings"
+	"net"
 	"net/http"
+	"os"
 	"encoding/json"
-	"time"
 	"github.com/burntsushi/toml"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
-type DirectiveConfig struct {
-	Name string `toml:"name"`
-	Command [][]string `toml:"cmd"`
-	Output bool `toml:"output"`
+const (
+	INITIAL_BACKOFF = 1
+	MAXIMUM_BACKOFF = 3600
+	LISTENING_ADDRESS = "0.0.0.0:8080"
+	CMD_SERVE = "serve"
+	CMD_EXEC = "exec"
+)
+
+type MisakiMessage struct {
+	CommandName string `json:"command_name"`
 }
 
 type AwsConfig struct {
 	SecretAccessKey string `toml:"secret_access_key"`
 	AccessKeyId string `toml:"access_key_id"`
 	Region string `toml:"region"`
-	QueueUrl string `toml:"queue_url"`
-}
-
-type SlackConfig struct {
-	WebhookUrl string `toml:"webhook_url"`
-	Channel string `toml:"channel"`
+	QueueName string `toml:"queue"`
 }
 
 type Config struct {
-	Slack SlackConfig `toml: "slack"`
+	SlackWebhookUrl string `toml:"slack_webhook_url"`
 	Aws AwsConfig `toml:"aws"`
-	Directives []DirectiveConfig `toml:"directives"`
+	Commands []Command `toml:"commands"`
 }
 
-type SlackMessage struct {
-	Text string `json:"text"`
-	ChannelId string `json:"channel_id"`
-	ChannelName string `json:"channel_name"`
-	Timestamp string `json:"timestamp"`
+func print_error(text string, values ...interface{}) {
+	fmt.Fprintf(os.Stderr, text, values...)
+}
+func print_log(text string, values ...interface{}) {
+	fmt.Fprintf(os.Stdout, text, values...)
 }
 
-type SlackPost struct {
-	Text string `json:"text"`
-	Channel string `json:"channel,omitempty"`
-	ThreadTs string `json:"thread_ts,omitempty"`
-}
+func run_executor(q *SQSQueue, m *Mediator, s *Slack, commands []Command) int {
 
-const (
-	INITIAL_BACKOFF = 1
-	MAX_BACKOFF = 3600
-)
+	m.Reset()
 
-func post_to_slack(webhook_url, text, channel, thread_ts string) {
+	for {
 
-	data := SlackPost {
-		Text: text,
-		Channel: channel,
-		ThreadTs: thread_ts,
-	}
-	payload, _ := json.Marshal(&data)
-	_, err := http.PostForm(webhook_url, url.Values{"payload": {string(payload)}})
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to post to Slack: %v\n", err)
-	}
-
-}
-
-func process_slack_message(msg_text, webhook_url, channel string, directives []DirectiveConfig) {
-
-	var msg SlackMessage
-
-	err := json.Unmarshal([]byte(msg_text), &msg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to parse Slack message: %v\n", err)
-		return
-	}
-
-	if channel != "" && (channel != msg.ChannelName) {
-		return
-	}
-
-	fmt.Printf("message: \"%s\" (%s)\n", msg.Text, msg.ChannelName)
-
-	if !strings.HasPrefix(msg.Text, "misaki ") {
-		return
-	}
-
-	name := strings.TrimPrefix(msg.Text, "misaki ")
-	var dir *DirectiveConfig = nil
-
-	for _, d := range directives {
-		if d.Name == name {
-			dir = &d
-			break
-		}
-	}
-
-	if dir == nil {
-		post_to_slack(
-			webhook_url,
-			fmt.Sprintf("unknown command name: %s", name),
-			msg.ChannelId,
-			msg.Timestamp,
-		)
-		return
-	}
-
-	all_out := []string{}
-	reply := ""
-
-	for _, c := range dir.Command {
-
-		out, err := exec.Command(c[0], c[1:]...).Output()
-
+		sqs_msg, err := q.WaitMessage()
 		if err != nil {
-			cj := strings.Join(c, " ")
-			reply = fmt.Sprintf("[%s] error: %v\n", cj, err)
-			break
+			print_error("cannot fetch SQS message: %v\n", err)
+			m.Wait()
+			m.Increment()
+			continue
 		}
-		all_out = append(all_out, string(out))
+		m.Reset()
+
+		err = sqs_msg.Delete()
+		if err != nil {
+			print_error("failed to delete SQS message: %v\n", err)
+			// continue to process the request
+		}
+
+		var m_msg MisakiMessage
+		err = json.Unmarshal([]byte(sqs_msg.Content), &m_msg)
+		if err != nil {
+			print_error("invalid message: %v\n", err)
+			continue
+		}
+
+		cmd_name := m_msg.CommandName
+		print_log("command: %s\n", cmd_name)
+		output := process_command(cmd_name, commands)
+		err = s.Post(output)
+		if err != nil {
+			print_error("failed to post: %v\n", err)
+		}
+	}
+}
+
+func run_server(q *SQSQueue, m *Mediator, commands []Command) int {
+
+	handler := NewMisakiHandler(func(cmd_name string) (string, int) {
+		print_log("command: %s\n", cmd_name)
+		m_msg := MisakiMessage {
+			CommandName: cmd_name,
+		}
+		encoded, _ := json.Marshal(m_msg)
+		err := q.PostMessage(string(encoded))
+		if err != nil {
+			return fmt.Sprintf("internal server error: %v", err), 500
+		}
+		return "OK", 200
+	}, commands)
+
+	server := &http.Server{
+		Handler: handler,
 	}
 
-	if reply == "" {
-		if dir.Output {
-			o := strings.Join(all_out, "\n")
-			reply = fmt.Sprintf("OK: %s\n", o)
-		} else {
-			reply = "OK"
-		}
+	listener, err := net.Listen("tcp", LISTENING_ADDRESS)
+	if err != nil {
+		print_error("cannot listen on %s: %v\n", LISTENING_ADDRESS, err)
+		return 1
+	}
+	err = server.Serve(listener)
+	if err != nil {
+		print_error("cannot start server: %v\n", err)
+		return 1
 	}
 
-	post_to_slack(
-		webhook_url,
-		reply,
-		msg.ChannelId,
-		msg.Timestamp,
-	)
+	return 0
 }
 
 func run() int {
 
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: %s CONFIG_FILE\n", os.Args[0])
+	if len(os.Args) < 3 {
+		fmt.Fprintf(os.Stderr, "usage: %s CMD CONFIG_FILE\n", os.Args[0])
 		return 1
 	}
 
-	config_file_path := os.Args[1]
+	cmd := os.Args[1]
+	config_file_path := os.Args[2]
 	var config Config
 
 	_, err := toml.DecodeFile(config_file_path, &config)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cannot read config file: %v\n", err)
+		print_error("cannot read config file: %v\n", err)
 		return 1
 	}
 
-	if config.Aws.QueueUrl == "" {
-		fmt.Fprintf(os.Stderr, "error: empty SQS url\n")
+	if config.Aws.QueueName == "" {
+		print_error("config error: empty SQS name\n")
 		return 1
 	}
-	if config.Slack.WebhookUrl == "" {
-		fmt.Fprintf(os.Stderr, "error: empty Slack webhook url\n")
+	if cmd == CMD_EXEC && config.SlackWebhookUrl == "" {
+		print_error("config error: empty Slack webhook url\n")
 		return 1
 	}
 
-	aws_config := aws.NewConfig()
-	if config.Aws.Region != "" {
-		aws_config.Region = aws.String(config.Aws.Region)
-	}
-	if config.Aws.SecretAccessKey != "" {
-		creds := credentials.NewStaticCredentials(
-			config.Aws.AccessKeyId, config.Aws.SecretAccessKey, "")
-		aws_config.Credentials = creds
-	}
+	q, err := NewSQSQueue(
+		config.Aws.QueueName,
+		config.Aws.Region,
+		config.Aws.AccessKeyId,
+		config.Aws.SecretAccessKey,
+	)
+	m := NewMediator(INITIAL_BACKOFF, MAXIMUM_BACKOFF)
 
-	session, err := session.NewSession(aws_config)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cannot start AWS session: %v\n", err)
+		print_error("failed to initialize SQS queue: %v\n", err)
 		return 1
 	}
 
-	client := sqs.New(session)
-
-	sqs_params := sqs.ReceiveMessageInput {
-		QueueUrl: aws.String(config.Aws.QueueUrl),
-		MaxNumberOfMessages: aws.Int64(1),
-		WaitTimeSeconds: aws.Int64(20),
-	}
-
-	backoff := INITIAL_BACKOFF
-
-	for {
-
-		resp, err := client.ReceiveMessage(&sqs_params)
-
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to fetch SQS message: %v\n", err)
-			backoff = backoff * 2
-			if backoff > MAX_BACKOFF {
-				backoff = MAX_BACKOFF
-			}
-			time.Sleep(time.Duration(backoff) * time.Second)
-			continue
-		}
-		backoff = INITIAL_BACKOFF
-
-		for _, msg := range resp.Messages {
-
-			msg_body := msg.Body
-			if msg_body == nil {
-				fmt.Fprintf(os.Stderr, "broken SQS message?\n")
-				continue
-			}
-
-			process_slack_message(
-				*msg_body,
-				config.Slack.WebhookUrl,
-				config.Slack.Channel,
-				config.Directives,
-			)
-
-			del_params := sqs.DeleteMessageInput {
-				QueueUrl: aws.String(config.Aws.QueueUrl),
-				ReceiptHandle: msg.ReceiptHandle,
-			}
-
-			_, err := client.DeleteMessage(&del_params)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to delete SQS message: %v\n", err)
-			}
-		}
+	if cmd == CMD_EXEC {
+		s := NewSlack(config.SlackWebhookUrl)
+		return run_executor(q, m, s, config.Commands)
+	} else if cmd == CMD_SERVE {
+		return run_server(q, m, config.Commands)
+	} else {
+		print_error("unknown command: %s\n", cmd)
+		return 1
 	}
 }
 

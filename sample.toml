@@ -1,16 +1,15 @@
-[slack]
-webhook_url = "https://hooks.slack.com/services/xxxxx/yyyyy/zzzzz"
-channel = "command"
+slack_webhook_url = "https://hooks.slack.com/services/xxxxx/yyyyy/zzzzz"
 
 [aws]
 secret_access_key = "XXXXXXXXXX"
 access_key_id = "XXXXXXXXXX"
 region = "us-east-1"
-queue_url = "https://sqs.us-east-1.amazonaws.com/0000000000/xxxxx"
+queue = "qqqqqqqqqq"
 
-[[directives]]
+[[commands]]
 name = "uptime"
-cmd = [
+memo = "execute uptime & uname"
+programs = [
 	["uname", "-a"],
 	["uptime"],
 ]

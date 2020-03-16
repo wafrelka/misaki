@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css?family=Ubuntu:400,700|Material+Icons&display=swap');
+
+* {
+	margin: 0;
+	padding: 0;
+}
+html {
+	font-size: 16px;
+}
+button {
+	background-color: transparent;
+	border: none;
+	cursor: pointer;
+	outline: none;
+	padding: 0;
+	text-align: initial;
+}
+button::-moz-focus-inner {
+	border: 0;
+}
+i {
+	font-family: 'Material Icons';
+	text-decoration: none;
+	font-style: normal;
+	font-weight: normal;
+}
+
+header {
+	padding: 0.5rem;
+	background-color: #2B362D;
+	color: #ffffff;
+	font-size: 1.4rem;
+	font-family: 'Ubuntu', sans-serif;
+}
+
+#list {
+	display: grid;
+	margin: 1.0rem;
+	grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+	gap: 1.0rem;
+	align-items: start;
+}
+
+.item {
+	position:relative;
+	border: 0.1rem solid #2B362D;
+	padding: 0.5rem;
+	background-color: #ffffff;
+	filter: drop-shadow(0 0.2rem 0.1rem #909090);
+	font-family: 'Ubuntu', sans-serif;
+}
+
+.item:active {
+	transform: translateY(0.2rem);
+	filter: none;
+}
+
+.item:not(:active):focus, .item:not(:active):hover {
+	filter: drop-shadow(0 0.2rem 0.2rem #606060);
+}
+
+.name {
+	color: #2B362D;
+	font-size: 1.0rem;
+	font-weight: bold;
+}
+
+.memo {
+	color: #909090;
+	font-size: 0.7rem;
+}
+
+.programs {
+	margin-top: 0.4rem;
+	padding: 0.3rem 0.2rem;
+	color: #909090;
+	background-color: #f0f0f0;
+	font-size: 0.7rem;
+}
+
+.status i {
+	position: absolute;
+	right: 0.5rem;
+	top: 0.5rem;
+	opacity: 0.0;
+	font-size: 1.3rem;
+}
+
+.status-done .display-done,
+.status-inflight .display-inflight,
+.status-error .display-error {
+	opacity: 1.0;
+	transition: opacity 0.5s;
+}
+
+.display-done {
+	color: #07a521;
+}
+.display-error {
+	color: #a50707;
+}
