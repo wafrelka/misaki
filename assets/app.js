@@ -39,10 +39,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 		let prog_template = progs_elem.querySelector(":scope > template");
 
 		for(let prog of cmd.programs) {
-			let prog_elem = prog_template.content.firstElementChild.cloneNode();
+			let prog_elem = prog_template.content.firstElementChild.cloneNode(true);
 			progs_elem.appendChild(prog_elem);
 			let prog_text = prog.join(" ");
-			prog_elem.textContent = `$ ${prog_text}`;
+			prog_elem.querySelector(".line-content").textContent = prog_text;
 		}
 
 		elem.addEventListener("click", async (ev) => {

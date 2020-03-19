@@ -38,11 +38,13 @@ header {
 	margin: 1.0rem;
 	grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
 	gap: 1.0rem;
-	align-items: start;
+	align-items: stretch;
 }
 
 .item {
 	position:relative;
+	display: flex;
+	flex-direction: column;
 	border: 0.1rem solid #2B362D;
 	padding: 0.5rem;
 	background-color: #ffffff;
@@ -76,6 +78,15 @@ header {
 	color: #909090;
 	background-color: #f0f0f0;
 	font-size: 0.7rem;
+}
+
+.program-line {
+	display: flex;
+}
+
+.line-prefix {
+	margin-right: 0.15rem;
+	color: #b8b8b8;
 }
 
 .status i {
