@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 func process_command(cmd_name string, commands []Command) string {
@@ -22,6 +23,7 @@ func process_command(cmd_name string, commands []Command) string {
 	}
 
 	resp_list := []string{}
+	start := time.Now()
 
 	for _, p := range cmd.Programs {
 
@@ -42,10 +44,12 @@ func process_command(cmd_name string, commands []Command) string {
 		}
 	}
 
+	elapsed_sec := time.Since(start).Seconds()
+
 	if len(resp_list) > 0 {
 		joined := strings.Join(resp_list, "\n")
-		return fmt.Sprintf("[%s] OK\n```\n%s\n```", cmd_name, joined)
+		return fmt.Sprintf("[%s] OK / %.1fs\n```\n%s\n```", cmd_name, elapsed_sec, joined)
 	} else {
-		return fmt.Sprintf("[%s] OK", cmd_name)
+		return fmt.Sprintf("[%s] OK / %.1fs", cmd_name, elapsed_sec)
 	}
 }
