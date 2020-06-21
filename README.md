@@ -2,7 +2,7 @@
 
 Tools for executing preset commands via the web interface.
 
-![screenshot.png](./docs/screenshot.png)
+<img src="./docs/screenshot.png" width="400">
 
 ## Architecture
 
