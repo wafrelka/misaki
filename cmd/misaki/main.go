@@ -7,6 +7,7 @@ import (
 	"os"
 	"encoding/json"
 	"github.com/burntsushi/toml"
+	"misaki/pkg"
 )
 
 const (
@@ -31,7 +32,7 @@ type AwsConfig struct {
 type Config struct {
 	SlackWebhookUrl string `toml:"slack_webhook_url"`
 	Aws AwsConfig `toml:"aws"`
-	Commands []Command `toml:"commands"`
+	Commands []misaki.Command `toml:"commands"`
 }
 
 func print_error(text string, values ...interface{}) {
@@ -41,7 +42,7 @@ func print_log(text string, values ...interface{}) {
 	fmt.Fprintf(os.Stdout, text, values...)
 }
 
-func run_executor(q *SQSQueue, m *Mediator, s *Slack, commands []Command) int {
+func run_executor(q *misaki.SQSQueue, m *misaki.Mediator, s *misaki.Slack, commands []misaki.Command) int {
 
 	m.Reset()
 
@@ -71,7 +72,7 @@ func run_executor(q *SQSQueue, m *Mediator, s *Slack, commands []Command) int {
 
 		cmd_name := m_msg.CommandName
 		print_log("command: %s\n", cmd_name)
-		output := process_command(cmd_name, commands)
+		output := misaki.ProcessCommand(cmd_name, commands)
 		err = s.Post(output)
 		if err != nil {
 			print_error("failed to post: %v\n", err)
@@ -79,9 +80,9 @@ func run_executor(q *SQSQueue, m *Mediator, s *Slack, commands []Command) int {
 	}
 }
 
-func run_server(q *SQSQueue, m *Mediator, commands []Command) int {
+func run_server(q *misaki.SQSQueue, m *misaki.Mediator, commands []misaki.Command) int {
 
-	handler := NewMisakiHandler(func(cmd_name string) (string, int) {
+	handler := misaki.NewMisakiHandler(func(cmd_name string) (string, int) {
 		print_log("command: %s\n", cmd_name)
 		m_msg := MisakiMessage {
 			CommandName: cmd_name,
@@ -138,13 +139,13 @@ func run() int {
 		return 1
 	}
 
-	q, err := NewSQSQueue(
+	q, err := misaki.NewSQSQueue(
 		config.Aws.QueueName,
 		config.Aws.Region,
 		config.Aws.AccessKeyId,
 		config.Aws.SecretAccessKey,
 	)
-	m := NewMediator(INITIAL_BACKOFF, MAXIMUM_BACKOFF)
+	m := misaki.NewMediator(INITIAL_BACKOFF, MAXIMUM_BACKOFF)
 
 	if err != nil {
 		print_error("failed to initialize SQS queue: %v\n", err)
@@ -152,7 +153,7 @@ func run() int {
 	}
 
 	if cmd == CMD_EXEC {
-		s := NewSlack(config.SlackWebhookUrl)
+		s := misaki.NewSlack(config.SlackWebhookUrl)
 		return run_executor(q, m, s, config.Commands)
 	} else if cmd == CMD_SERVE {
 		return run_server(q, m, config.Commands)

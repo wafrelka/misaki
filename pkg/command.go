@@ -1,4 +1,4 @@
-package main
+package misaki
 
 type Command struct {
 	Name string `toml:"name" json:"name"`

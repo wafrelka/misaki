@@ -1,4 +1,4 @@
-package main
+package misaki
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 
 func from_pkger_file(file_path string) http.Handler {
 	h := func(w http.ResponseWriter, req *http.Request) {
-		file, err := pkger.Open(path.Join("/assets", file_path))
+		file, err := pkger.Open(path.Join("/pkg/assets", file_path))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return

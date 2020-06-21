@@ -1,4 +1,4 @@
-package main
+package misaki
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func process_command(cmd_name string, commands []Command) string {
+func ProcessCommand(cmd_name string, commands []Command) string {
 
 	var cmd *Command = nil
 
