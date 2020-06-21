@@ -44,11 +44,14 @@ func match_origin(req *http.Request) bool {
 	return origin == "" || http_host == origin || https_host == origin
 }
 
-func NewMisakiHandler(command_handler func(string) (string, int), cmds []Command) http.Handler {
+type CommandPicker func(*http.Request) string
+type CommandHandler func(string) (string, int)
+type RequestHandler func(http.ResponseWriter, *http.Request)
 
-	mux := http.NewServeMux()
+func synthesize_request_handler(command_handler CommandHandler, command_picker CommandPicker) RequestHandler {
 
-	mux.HandleFunc("/request", func(w http.ResponseWriter, req *http.Request) {
+	fn := func(w http.ResponseWriter, req *http.Request) {
+
 		if req.Method != "POST" || req.Body == nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -57,11 +60,39 @@ func NewMisakiHandler(command_handler func(string) (string, int), cmds []Command
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		cmd_name := req.PostFormValue("command")
+
+		cmd_name := command_picker(req)
 		resp, code := command_handler(cmd_name)
 		w.WriteHeader(code)
 		w.Write([]byte(resp))
-	})
+	}
+
+	return fn
+}
+
+func NewMisakiHandler(command_handler CommandHandler, cmds []Command) http.Handler {
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(
+		"/request/",
+		synthesize_request_handler(
+			command_handler,
+			func(req *http.Request) string {
+				return req.URL.Path[len("/request/"):]
+			},
+		),
+	)
+
+	mux.HandleFunc(
+		"/request",
+		synthesize_request_handler(
+			command_handler,
+			func(req *http.Request) string {
+				return req.PostFormValue("command")
+			},
+		),
+	)
 
 	mux.HandleFunc("/commands", func(w http.ResponseWriter, req *http.Request) {
 		resp, _ := json.Marshal(cmds)
