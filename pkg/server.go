@@ -48,7 +48,11 @@ type CommandPicker func(*http.Request) string
 type CommandHandler func(string) (string, int)
 type RequestHandler func(http.ResponseWriter, *http.Request)
 
-func synthesize_request_handler(command_handler CommandHandler, command_picker CommandPicker) RequestHandler {
+func synthesize_request_handler(
+	cmds []Command,
+	command_handler CommandHandler,
+	command_picker CommandPicker,
+) RequestHandler {
 
 	fn := func(w http.ResponseWriter, req *http.Request) {
 
@@ -62,6 +66,18 @@ func synthesize_request_handler(command_handler CommandHandler, command_picker C
 		}
 
 		cmd_name := command_picker(req)
+		found := false
+		for _, cmd := range cmds {
+			if cmd.Name == cmd_name {
+				found = true
+			}
+		}
+		if !found {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("unknown command"))
+			return
+		}
+
 		resp, code := command_handler(cmd_name)
 		w.WriteHeader(code)
 		w.Write([]byte(resp))
@@ -77,6 +93,7 @@ func NewMisakiHandler(command_handler CommandHandler, cmds []Command) http.Handl
 	mux.HandleFunc(
 		"/request/",
 		synthesize_request_handler(
+			cmds,
 			command_handler,
 			func(req *http.Request) string {
 				return req.URL.Path[len("/request/"):]
@@ -87,6 +104,7 @@ func NewMisakiHandler(command_handler CommandHandler, cmds []Command) http.Handl
 	mux.HandleFunc(
 		"/request",
 		synthesize_request_handler(
+			cmds,
 			command_handler,
 			func(req *http.Request) string {
 				return req.PostFormValue("command")
