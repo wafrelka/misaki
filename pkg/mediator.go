@@ -18,6 +18,10 @@ func NewMediator(initial, maximum int) *Mediator {
 	}
 }
 
+func (m *Mediator) GetCurrent() int {
+	return m.current
+}
+
 func (m *Mediator) Reset() {
 	m.current = m.initial
 }

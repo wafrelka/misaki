@@ -12,7 +12,7 @@ import (
 
 const (
 	INITIAL_BACKOFF = 1
-	MAXIMUM_BACKOFF = 3600
+	MAXIMUM_BACKOFF = 300
 	LISTENING_ADDRESS = "0.0.0.0:8080"
 	CMD_SERVE = "serve"
 	CMD_EXEC = "exec"
@@ -51,6 +51,7 @@ func run_executor(q *misaki.SQSQueue, m *misaki.Mediator, s *misaki.Slack, comma
 		sqs_msg, err := q.WaitMessage()
 		if err != nil {
 			print_error("cannot fetch SQS message: %v\n", err)
+			print_error("wait for %d seconds\n", m.GetCurrent())
 			m.Wait()
 			m.Increment()
 			continue
